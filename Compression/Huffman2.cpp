@@ -67,51 +67,63 @@ void encode(string inputFileName, string outputFileName, unordered_map<char, str
     }
     ofstream output(outputFileName, ios::binary);
 
-    string builder = "";
     string line;
-    int count = 0;
+    unsigned char* buffer = new unsigned char[BUFBYTES]{};
+    int index = 7;
+    int block = BUFBYTES-1;
     while(getline(input, line)) {
-        if (!input.eof())
-            line += '\n';
         for(char c: line) {
-            if (count == 5) return;
-            count++;
             string current = codes[c];
-            if (current.length() + builder.length() > BUFSIZE) {
-                int size = builder.length();
-                if (size < BUFSIZE) {
-                    builder += current.substr(0, BUFSIZE - size);
-                    current = current.substr(BUFSIZE - size);
+            for(char i: current) {
+                if(i == '1') {
+                    buffer[block] |= 1 << index;
                 }
-                cout << builder << endl;
-                bitset<BUFSIZE> bits(builder);
-                unsigned char* buffer = new unsigned char[BUFBYTES]{};
-                for(int i = 0; i < BUFSIZE; i++){
-                    if (bits[i]){
-                        buffer[i/8] |= 1 << (i%8);
-                    }
-                }
-                output.write(reinterpret_cast<const char*>(buffer), BUFBYTES);
-                builder = current;
-            } else {
-                builder += current;
+
+                index--;
+                if (index == -1) {
+                    block--;
+                    index = 7;
+                }    
+                if (block == -1)  {
+                    output.write(reinterpret_cast<const char*>(buffer), BUFBYTES);
+                    delete[] buffer;
+                    buffer = new unsigned char[BUFBYTES]{};
+                    block = BUFBYTES-1;
+                }       
             }
         }
-    }
-    for(int i = builder.length(); i < BUFSIZE; i++) {
-        builder+="1";
-    }
-    bitset<BUFSIZE> bits(builder);
-    unsigned char* buffer = new unsigned char[BUFBYTES]{};
-    for(int i = 0; i < BUFSIZE; i++){
-        if (bits[i]){
-            buffer[i/8] |= 1 << (i%8);
+        string current = codes['\n'];
+        for(char i: current) {
+            if(i == '1') {
+                buffer[block] |= 1 << index;
+            }
+
+            index--;
+            if (index == -1) {
+                block--;
+                index = 7;
+            }    
+            if (block == -1)  {
+                output.write(reinterpret_cast<const char*>(buffer), BUFBYTES);
+                delete[] buffer;
+                buffer = new unsigned char[BUFBYTES]{};
+                block = BUFBYTES-1;
+            }       
+        }
+    } 
+    while(block != -1) {
+        buffer[block] |= 1 << index;
+        index--;
+        if (index == -1) {
+            block--;
+            index = 7;
         }
     }
     output.write(reinterpret_cast<const char*>(buffer), BUFBYTES);
+    delete[] buffer;
+
     output.close();
     input.close();
-    delete[] buffer;
     return;
 }
 
