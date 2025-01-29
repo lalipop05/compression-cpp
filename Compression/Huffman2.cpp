@@ -9,7 +9,7 @@
 
 using namespace std;
 
-const string FILENAME = "test";
+const string FILENAME = "Words";
 const string EXTENSION = ".txt";
 const int BUFSIZE = 8;
 const int BUFBYTES = BUFSIZE >> 3;
@@ -50,7 +50,6 @@ unordered_map<char, string> produceCodes(vector<pair<char, int>> sortedFreq){
     if (N == 0) return {};
     unordered_map<char, string> encode;
     string builder = "";
-    int c = 0;
     for(int i = 0; i < N; i++){
         pair<char, int>& p = sortedFreq[i];
         encode[p.first] = builder+"0";
@@ -70,11 +69,13 @@ void encode(string inputFileName, string outputFileName, unordered_map<char, str
 
     string builder = "";
     string line;
-
+    int count = 0;
     while(getline(input, line)) {
         if (!input.eof())
             line += '\n';
         for(char c: line) {
+            if (count == 5) return;
+            count++;
             string current = codes[c];
             if (current.length() + builder.length() > BUFSIZE) {
                 int size = builder.length();
@@ -82,20 +83,14 @@ void encode(string inputFileName, string outputFileName, unordered_map<char, str
                     builder += current.substr(0, BUFSIZE - size);
                     current = current.substr(BUFSIZE - size);
                 }
-
+                cout << builder << endl;
                 bitset<BUFSIZE> bits(builder);
-                int m = 0;
                 unsigned char* buffer = new unsigned char[BUFBYTES]{};
-                for(int i = 0; m < BUFBYTES; i++){
-                    if (i == 8) {
-                        i = 0;
-                        m++;
-                    }
+                for(int i = 0; i < BUFSIZE; i++){
                     if (bits[i]){
-                        buffer[m] |= 1 << (i);
+                        buffer[i/8] |= 1 << (i%8);
                     }
                 }
-
                 output.write(reinterpret_cast<const char*>(buffer), BUFBYTES);
                 builder = current;
             } else {
@@ -103,28 +98,20 @@ void encode(string inputFileName, string outputFileName, unordered_map<char, str
             }
         }
     }
-    
     for(int i = builder.length(); i < BUFSIZE; i++) {
         builder+="1";
     }
-    cout << builder << endl;
-    cout << builder.length() << endl;
-    int m = 0;
     bitset<BUFSIZE> bits(builder);
     unsigned char* buffer = new unsigned char[BUFBYTES]{};
-    
     for(int i = 0; i < BUFSIZE; i++){
-        int mod = i % 8;
-        if (!mod) m++;
-        cout << bits[i];
         if (bits[i]){
-            buffer[m] |= 1 << (mod);
+            buffer[i/8] |= 1 << (i%8);
         }
     }
-    //for (int i = 0; i < BUFBYTES; i++) cout << buffer[i];
     output.write(reinterpret_cast<const char*>(buffer), BUFBYTES);
     output.close();
     input.close();
+    delete[] buffer;
     return;
 }
 
@@ -140,7 +127,7 @@ void decode(string inputFileName, string outputFileName, unordered_map<string, c
     char c;
     while(input >> c) {
         for(int i = 7; i >= 0; i--) {
-            if (c >> i & 1 == 1) {
+            if ((c >> i & 1) == 1) {
                 builder+="1";
             }else {
                 output << decodes[builder+"0"];
@@ -161,7 +148,7 @@ int main() {
     });
 
     unordered_map<char, string> codes = produceCodes(sorted);
-    for(const pair<const char, string>& p: codes) cout << p.first << " " << p.second << endl;
+    for(const pair<const char, string>& p: codes) cout << p.first << " " << p.second.length()-1 << endl;
 
     encode(FILENAME+EXTENSION, FILENAME+".bin", codes);
 
