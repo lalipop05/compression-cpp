@@ -6,13 +6,31 @@
 #include <string>
 #include <bitset>
 #include <cmath>
+#include <queue>
+#include <chrono>
+#include <cstdio>
+#include <cstdlib>
+#include <string.h>
+
+#define CHAR unsigned char
 
 using namespace std;
 
-const string FILENAME = "Words";
+
+const string FILENAME = "test";
 const string EXTENSION = ".txt";
-const int BUFSIZE = 8;
-const int BUFBYTES = BUFSIZE >> 3;
+const int BUFFSIZE = 1024*64*8;
+const int BUFFBYTES = BUFFSIZE;
+
+
+struct Node {
+    int freq;
+    Node* left;
+    Node* right;
+    CHAR val;
+    Node(CHAR c) : freq(1), left(nullptr), right(nullptr), val(c) {}
+    Node(int f, Node* l, Node* r) : freq(f), left(l), right(r), val(255) {}
+};
 
 template <typename T, typename P> unordered_map<T, P> swap(const unordered_map<P,T>& dict) {
     unordered_map<T,P> res;
@@ -20,153 +38,134 @@ template <typename T, typename P> unordered_map<T, P> swap(const unordered_map<P
     return res;
 } 
 
-
-unordered_map<char,int> fileParse(string filename) {
-    unordered_map<char, int> count;
+void fileParse(string filename, vector<Node*>& frequency) {
     try
     {
-        fstream input = fstream(filename);
+        ifstream input = ifstream(filename);
         if(!input){
             input.close();
             throw runtime_error("Could not open file: " + filename);
         }
-        string line;
-        while(getline(input, line)){
-            for(char &c: line) 
-                count[c]++;
-            if (!input.eof()) count['\n']++;
-        } 
+        CHAR c;
+        while (input.get(reinterpret_cast<char&>(c))) { 
+            if (frequency[c] == nullptr) {
+                frequency[c] = new Node(c);
+            } else {
+                frequency[c]->freq++;
+            }
+        }
         input.close();
     }
-    catch(const std::exception& e)
+    catch(const exception& e)
     {
-        std::cerr << e.what() << '\n';
+        cerr << e.what() << '\n';
+        exit(1);
     } 
-    return count;
 }
 
-unordered_map<char, string> produceCodes(vector<pair<char, int>> sortedFreq){
-    int N = sortedFreq.size();
-    if (N == 0) return {};
-    unordered_map<char, string> encode;
-    string builder = "";
-    for(int i = 0; i < N; i++){
-        pair<char, int>& p = sortedFreq[i];
-        encode[p.first] = builder+"0";
-        builder+="1";
-    } 
-    encode[(char)3] = builder;
-    return encode;
-}
+Node* makeTree(vector<Node*>& count) {
+    struct CompareNodes {
+        bool operator()(const Node* a, const Node* b) const {
+            return a->freq > b->freq; // Min-heap behavior
+        }
+    };
 
-void encode(string inputFileName, string outputFileName, unordered_map<char, string>& codes) {
-    ifstream input(inputFileName);
-    if (!input) {
-        cerr << "Could not open  " << inputFileName << endl;
-        return;
+    priority_queue<Node*, vector<Node*>, CompareNodes> pq;
+    
+    for (auto& v: count) {
+        if (v != nullptr) {
+            pq.push(v);
+        }
     }
-    ofstream output(outputFileName, ios::binary);
 
-    string line;
-    unsigned char* buffer = new unsigned char[BUFBYTES]{};
-    int index = 7;
-    int block = BUFBYTES-1;
-    while(getline(input, line)) {
-        for(char c: line) {
-            string current = codes[c];
-            for(char i: current) {
-                if(i == '1') {
-                    buffer[block] |= 1 << index;
+    while(pq.size() != 1) {
+        Node* right = pq.top();
+        pq.pop();
+        Node* left = pq.top();
+        pq.pop();
+        Node* node = new Node(left->freq+right->freq, left, right);
+        pq.push(node);
+    }
+    return pq.top();
+}
+
+void parseTree(Node* root, unordered_map<CHAR, string>& codes, string acc) {
+    if (!root) return;
+    if (root->val != 255) {
+        codes[root->val] = acc;
+    }else {
+        parseTree(root->left, codes, acc+"0");
+        parseTree(root->right, codes, acc+"1");
+    }
+    delete root;
+}
+
+void encode(string inputFilename, string outputFilename, unordered_map<CHAR, string>& codes) {
+    FILE* output = fopen(outputFilename.c_str(), "wb");
+    FILE* input = fopen(inputFilename.c_str(), "rb");
+    if (!input) {
+        cerr << "Could not open file: " << inputFilename << endl;
+        exit(1);
+    }
+       
+    CHAR buffer[BUFFSIZE];
+    CHAR writeBuffer[BUFFSIZE]{};  // Buffer to store bits being written
+    int bytesRead;
+    int bit = 7;  // Start writing bits from the most significant bit
+    int byte = 0; // Pointer to the current byte in the write buffer
+    while ((bytesRead = fread(buffer, 1, BUFFSIZE, input)) && bytesRead > 0) {
+        for (int i = 0; i < bytesRead; i++) {
+            string s = codes[buffer[i]]; // Get the Huffman code for the current character
+            cout << s << endl;
+            for (char c : s) {  // Process each bit in the code
+                if (c == '1') {
+                    writeBuffer[byte] |= (1 << bit); // Set the bit in the buffer
                 }
+                bit--;  // Move to the next bit in the current byte
 
-                index--;
-                if (index == -1) {
-                    block--;
-                    index = 7;
-                }    
-                if (block == -1)  {
-                    output.write(reinterpret_cast<const char*>(buffer), BUFBYTES);
-                    delete[] buffer;
-                    buffer = new unsigned char[BUFBYTES]{};
-                    block = BUFBYTES-1;
-                }       
+                // If we have filled a byte, write it to the output
+                if (bit == -1) {
+                    bit = 7;
+                    byte++;
+                    if (byte >= BUFFSIZE) {
+                        // Write the buffer to the output only if it has been fully filled
+                        fwrite(writeBuffer, 1, BUFFSIZE, output);
+                        byte = 0;
+                        memset(writeBuffer, 0, BUFFSIZE);  // Reset the write buffer
+                    }
+                }
             }
-        }
-        string current = codes['\n'];
-        for(char i: current) {
-            if(i == '1') {
-                buffer[block] |= 1 << index;
-            }
-
-            index--;
-            if (index == -1) {
-                block--;
-                index = 7;
-            }    
-            if (block == -1)  {
-                output.write(reinterpret_cast<const char*>(buffer), BUFBYTES);
-                delete[] buffer;
-                buffer = new unsigned char[BUFBYTES]{};
-                block = BUFBYTES-1;
-            }       
-        }
-    } 
-    while(block != -1) {
-        buffer[block] |= 1 << index;
-        index--;
-        if (index == -1) {
-            block--;
-            index = 7;
         }
     }
-    output.write(reinterpret_cast<const char*>(buffer), BUFBYTES);
-    delete[] buffer;
 
-    output.close();
-    input.close();
-    return;
+    // Handle the final part where we may not have filled the entire buffer
+    if (byte > 0 || bit < 7) {
+        fwrite(writeBuffer, 1, byte + (bit < 7 ? 1 : 0), output);  // Write the remaining part of the buffer
+    }
+
+    fclose(input);
+    fclose(output);
 }
 
-void decode(string inputFileName, string outputFileName, unordered_map<string, char>& decodes) {
-    string builder = "";
-    ifstream input(inputFileName, ios::binary);
-    if (!input) {
-        cerr << "Could not open file: " << inputFileName << endl;
-        return;
-    }
-    ofstream output(outputFileName);
-
-    char c;
-    while(input >> c) {
-        for(int i = 7; i >= 0; i--) {
-            if ((c >> i & 1) == 1) {
-                builder+="1";
-            }else {
-                output << decodes[builder+"0"];
-                builder = "";
-            }
-        }
-    }
-    output.close();
-    input.close();
-    return;
-}
 
 int main() {
-    unordered_map<char, int> count = fileParse(FILENAME+EXTENSION);
-    vector<pair<char, int>> sorted(count.begin(), count.end());
-    sort(sorted.begin(), sorted.end(), [](const pair<char, int>& a, const pair<char, int>& b) {
-        return a.second > b.second;
-    });
+    auto start = chrono::high_resolution_clock::now();    
+    vector<Node*> count = vector<Node*>(256, nullptr);
+    fileParse(FILENAME+EXTENSION, count);
 
-    unordered_map<char, string> codes = produceCodes(sorted);
-    for(const pair<const char, string>& p: codes) cout << p.first << " " << p.second.length()-1 << endl;
+    Node* HuffmanRoot = makeTree(count);
 
+    unordered_map<CHAR, string> codes;
+    parseTree(HuffmanRoot, codes, "");
+    for(auto &p: codes) cout << p.first << " " << p.second << endl;
+    
     encode(FILENAME+EXTENSION, FILENAME+".bin", codes);
 
-    unordered_map<string, char> decodes = swap(codes);
+    auto end = chrono::high_resolution_clock::now(); 
 
-    decode(FILENAME+".bin", "HUFF"+FILENAME+".txt", decodes);
+    chrono::duration<double> elapsed = end - start; // Calculate elapsed time
+    cout << "Execution time: " << elapsed.count() << " seconds" << endl;    
 
     return 0;
 }
+
