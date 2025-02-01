@@ -138,7 +138,7 @@ void encode(string inputFilename, string outputFilename, unordered_map<CHAR, str
     fclose(output);
 }
 
-void decode(string inputFilename, string outputFilename, const unordered_map<string, CHAR>& decodes, Node* root) {
+void decode(string inputFilename, string outputFilename, Node* root) {
     FILE* input = fopen(inputFilename.c_str(), "rb");
     FILE* output = fopen(outputFilename.c_str(), "wb");
     if (!input) {
@@ -187,9 +187,8 @@ int main() {
     // 0.3 for all other functions total
     encode(FILENAME+EXTENSION, FILENAME+".bin", codes);
 
-    unordered_map<string, CHAR> decodes = swap(codes);
 
-    decode(FILENAME+".bin", FILENAME+".decoded"+".txt", decodes, HuffmanRoot);
+    decode(FILENAME+".bin", FILENAME+".decoded"+".txt", HuffmanRoot);
 
     auto end = chrono::high_resolution_clock::now(); 
 

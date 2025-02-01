@@ -1,3 +1,6 @@
 .vscode/
 Compression/output/
 Compression/*.bin
+Compression/huffman_compression.cpp
+Compression/*.exe
+.gitignore
