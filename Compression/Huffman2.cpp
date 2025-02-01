@@ -38,29 +38,25 @@ template <typename T, typename P> unordered_map<T, P> swap(const unordered_map<P
     return res;
 } 
 
-void fileParse(string filename, vector<Node*>& frequency) {
-    try
-    {
-        ifstream input = ifstream(filename);
-        if(!input){
-            input.close();
-            throw runtime_error("Could not open file: " + filename);
-        }
-        CHAR c;
-        while (input.get(reinterpret_cast<char&>(c))) { 
+void newfileParse(string filename, vector<Node*>& frequency) {
+    FILE* input = fopen(filename.c_str(), "rb");
+    CHAR buffer[BUFFSIZE]{};
+    if(!input){
+        cerr << "Could not open file: " << filename << '\n';
+        exit(1);
+    }
+    int buffsize;
+    while ((buffsize = fread(&buffer, 1, BUFFSIZE, input)) && (buffsize > 0)) { 
+        for (int i = 0; i < buffsize; i++) {
+            CHAR c = buffer[i];
             if (frequency[c] == nullptr) {
                 frequency[c] = new Node(c);
             } else {
                 frequency[c]->freq++;
             }
         }
-        input.close();
     }
-    catch(const exception& e)
-    {
-        cerr << e.what() << '\n';
-        exit(1);
-    } 
+    fclose(input);
 }
 
 Node* makeTree(vector<Node*>& count) {
@@ -108,30 +104,25 @@ void encode(string inputFilename, string outputFilename, unordered_map<CHAR, str
         exit(1);
     }
        
-    CHAR buffer[BUFFSIZE];
+    CHAR buffer[BUFFSIZE]{};
     CHAR writeBuffer[BUFFSIZE]{};  // Buffer to store bits being written
     int bytesRead;
-    int bit = 7;  // Start writing bits from the most significant bit
-    int byte = 0; // Pointer to the current byte in the write buffer
+    int bit = 7;
+    int byte = 0;
     while ((bytesRead = fread(buffer, 1, BUFFSIZE, input)) && bytesRead > 0) {
         for (int i = 0; i < bytesRead; i++) {
-            string s = codes[buffer[i]]; // Get the Huffman code for the current character
+            const string& s = codes[buffer[i]];
             //cout << s << endl;
-            for (char c : s) {  // Process each bit in the code
-                if (c == '1') {
-                    writeBuffer[byte] |= (1 << bit); // Set the bit in the buffer
-                }
-                bit--;  // Move to the next bit in the current byte
-
-                // If we have filled a byte, write it to the output
+            for (const char& c : s) {
+                writeBuffer[byte] |= (c == '1') << bit;
+                bit--;
                 if (bit == -1) {
                     bit = 7;
                     byte++;
                     if (byte >= BUFFSIZE) {
-                        // Write the buffer to the output only if it has been fully filled
                         fwrite(writeBuffer, 1, BUFFSIZE, output);
                         byte = 0;
-                        memset(writeBuffer, 0, BUFFSIZE);  // Reset the write buffer
+                        memset(writeBuffer, 0, BUFFSIZE);
                     }
                 }
             }
@@ -183,16 +174,17 @@ void decode(string inputFilename, string outputFilename, const unordered_map<str
 }
  
 int main() {
-    auto start = chrono::high_resolution_clock::now();    
+    auto start = chrono::high_resolution_clock::now(); 
+    
     vector<Node*> count = vector<Node*>(256, nullptr);
-    fileParse(FILENAME+EXTENSION, count);
-
+    newfileParse(FILENAME+EXTENSION, count);
+    
     Node* HuffmanRoot = makeTree(count);
 
     unordered_map<CHAR, string> codes;
     parseTree(HuffmanRoot, codes, "");
-    //for(auto &p: codes) cout << p.first << " " << p.second << endl;
-    
+    // 6 secs to encode and 3 seconds to decode
+    // 0.3 for all other functions total
     encode(FILENAME+EXTENSION, FILENAME+".bin", codes);
 
     unordered_map<string, CHAR> decodes = swap(codes);
