@@ -97,7 +97,7 @@ void parseTree(Node* root, unordered_map<CHAR, string>& codes, string acc) {
         parseTree(root->left, codes, acc+"0");
         parseTree(root->right, codes, acc+"1");
     }
-    delete root;
+    //delete root;
 }
 
 void encode(string inputFilename, string outputFilename, unordered_map<CHAR, string>& codes) {
@@ -147,7 +147,7 @@ void encode(string inputFilename, string outputFilename, unordered_map<CHAR, str
     fclose(output);
 }
 
-void decode(string inputFilename, string outputFilename, unordered_map<string, CHAR>& decodes) {
+void decode(string inputFilename, string outputFilename, const unordered_map<string, CHAR>& decodes, Node* root) {
     FILE* input = fopen(inputFilename.c_str(), "rb");
     FILE* output = fopen(outputFilename.c_str(), "wb");
     if (!input) {
@@ -156,22 +156,24 @@ void decode(string inputFilename, string outputFilename, unordered_map<string, C
     }
     int bytesRead;
     CHAR c;
-    string builder = "";
+    Node* node = root;
     vector<CHAR> buffer;
     while((bytesRead = fread(&c, 1, 1, input)) && bytesRead > 0) {
         for(int i = 7; i >= 0; i--) {
-            //cout << to_string(c >> i & 1) << endl;
-            builder += to_string(c >> i & 1);;
-            auto it = decodes.find(builder);
-            if (it != decodes.end()) {
-                buffer.push_back(it->second);
-                builder = "";
+            if (c >> i & 1) {
+                node = node->right;
+            } else {
+                node = node->left;
+            }
+            if (!node->left) {
+                buffer.push_back(node->val);
+                node = root;
                 if (buffer.size() == BUFFSIZE) { 
                     fwrite(buffer.data(), 1, BUFFSIZE, output);
                     buffer.clear();
                 }
-                
             }
+                
         }
     }
     fwrite(buffer.data(), 1, buffer.size(), output);
@@ -195,7 +197,7 @@ int main() {
 
     unordered_map<string, CHAR> decodes = swap(codes);
 
-    decode(FILENAME+".bin", FILENAME+".decoded"+".txt", decodes);
+    decode(FILENAME+".bin", FILENAME+".decoded"+".txt", decodes, HuffmanRoot);
 
     auto end = chrono::high_resolution_clock::now(); 
 
