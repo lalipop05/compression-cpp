@@ -20,7 +20,6 @@ using namespace std;
 const string FILENAME = "Words";
 const string EXTENSION = ".txt";
 const int BUFFSIZE = 1024*64*8;
-const int BUFFBYTES = BUFFSIZE;
 
 
 struct Node {
@@ -32,20 +31,16 @@ struct Node {
     Node(int f, Node* l, Node* r) : freq(f), left(l), right(r), val(255) {}
 };
 
-template <typename T, typename P> unordered_map<T, P> swap(const unordered_map<P,T>& dict) {
-    unordered_map<T,P> res;
-    for (const auto& p: dict) res[p.second] = p.first;
-    return res;
-} 
-
 void newfileParse(string filename, vector<Node*>& frequency) {
-    FILE* input = fopen(filename.c_str(), "rb");
+    
+    int buffsize;
     CHAR buffer[BUFFSIZE]{};
+    FILE* input = fopen(filename.c_str(), "rb");
     if(!input){
         cerr << "Could not open file: " << filename << '\n';
         exit(1);
     }
-    int buffsize;
+    
     while ((buffsize = fread(&buffer, 1, BUFFSIZE, input)) && (buffsize > 0)) { 
         for (int i = 0; i < buffsize; i++) {
             CHAR c = buffer[i];
@@ -105,17 +100,19 @@ void encode(string inputFilename, string outputFilename, unordered_map<CHAR, str
     }
        
     CHAR buffer[BUFFSIZE]{};
-    CHAR writeBuffer[BUFFSIZE]{};  // Buffer to store bits being written
+    CHAR writeBuffer[BUFFSIZE]{};
     int bytesRead;
     int bit = 7;
     int byte = 0;
+
     while ((bytesRead = fread(buffer, 1, BUFFSIZE, input)) && bytesRead > 0) {
         for (int i = 0; i < bytesRead; i++) {
             const string& s = codes[buffer[i]];
-            //cout << s << endl;
+
             for (const char& c : s) {
                 writeBuffer[byte] |= (c == '1') << bit;
                 bit--;
+
                 if (bit == -1) {
                     bit = 7;
                     byte++;
@@ -129,9 +126,8 @@ void encode(string inputFilename, string outputFilename, unordered_map<CHAR, str
         }
     }
 
-    // Handle the final part where we may not have filled the entire buffer
     if (byte > 0 || bit < 7) {
-        fwrite(writeBuffer, 1, byte + (bit < 7 ? 1 : 0), output);  // Write the remaining part of the buffer
+        fwrite(writeBuffer, 1, byte + (bit < 7 ? 1 : 0), output);
     }
 
     fclose(input);
@@ -145,17 +141,21 @@ void decode(string inputFilename, string outputFilename, Node* root) {
         cerr << "Could not open file: " << inputFilename << endl;
         exit(1);
     }
+
     int bytesRead;
     CHAR c;
     Node* node = root;
     vector<CHAR> buffer;
+
     while((bytesRead = fread(&c, 1, 1, input)) && bytesRead > 0) {
         for(int i = 7; i >= 0; i--) {
+
             if (c >> i & 1) {
                 node = node->right;
             } else {
                 node = node->left;
             }
+
             if (!node->left) {
                 buffer.push_back(node->val);
                 node = root;
@@ -168,31 +168,40 @@ void decode(string inputFilename, string outputFilename, Node* root) {
         }
     }
     fwrite(buffer.data(), 1, buffer.size(), output);
+
     fclose(output);
     fclose(input);
+}
 
+void deleteTree(Node* root) {
+    if (!root) return;
+    deleteTree(root->left);
+    deleteTree(root->right);
+    delete root;
 }
  
 int main() {
     auto start = chrono::high_resolution_clock::now(); 
     
     vector<Node*> count = vector<Node*>(256, nullptr);
+    
     newfileParse(FILENAME+EXTENSION, count);
     
     Node* HuffmanRoot = makeTree(count);
 
     unordered_map<CHAR, string> codes;
-    parseTree(HuffmanRoot, codes, "");
-    // 6 secs to encode and 3 seconds to decode
-    // 0.3 for all other functions total
-    encode(FILENAME+EXTENSION, FILENAME+".bin", codes);
 
+    parseTree(HuffmanRoot, codes, "");
+
+    encode(FILENAME+EXTENSION, FILENAME+".bin", codes);
 
     decode(FILENAME+".bin", FILENAME+".decoded"+".txt", HuffmanRoot);
 
+    deleteTree(HuffmanRoot);
+
     auto end = chrono::high_resolution_clock::now(); 
 
-    chrono::duration<double> elapsed = end - start; // Calculate elapsed time
+    chrono::duration<double> elapsed = end - start;
     cout << "Execution time: " << elapsed.count() << " seconds" << endl;    
 
     return 0;
