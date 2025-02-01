@@ -17,7 +17,7 @@
 using namespace std;
 
 
-const string FILENAME = "test";
+const string FILENAME = "Words";
 const string EXTENSION = ".txt";
 const int BUFFSIZE = 1024*64*8;
 const int BUFFBYTES = BUFFSIZE;
@@ -116,7 +116,7 @@ void encode(string inputFilename, string outputFilename, unordered_map<CHAR, str
     while ((bytesRead = fread(buffer, 1, BUFFSIZE, input)) && bytesRead > 0) {
         for (int i = 0; i < bytesRead; i++) {
             string s = codes[buffer[i]]; // Get the Huffman code for the current character
-            cout << s << endl;
+            //cout << s << endl;
             for (char c : s) {  // Process each bit in the code
                 if (c == '1') {
                     writeBuffer[byte] |= (1 << bit); // Set the bit in the buffer
@@ -147,7 +147,39 @@ void encode(string inputFilename, string outputFilename, unordered_map<CHAR, str
     fclose(output);
 }
 
+void decode(string inputFilename, string outputFilename, unordered_map<string, CHAR>& decodes) {
+    FILE* input = fopen(inputFilename.c_str(), "rb");
+    FILE* output = fopen(outputFilename.c_str(), "wb");
+    if (!input) {
+        cerr << "Could not open file: " << inputFilename << endl;
+        exit(1);
+    }
+    int bytesRead;
+    CHAR c;
+    string builder = "";
+    vector<CHAR> buffer;
+    while((bytesRead = fread(&c, 1, 1, input)) && bytesRead > 0) {
+        for(int i = 7; i >= 0; i--) {
+            //cout << to_string(c >> i & 1) << endl;
+            builder += to_string(c >> i & 1);;
+            auto it = decodes.find(builder);
+            if (it != decodes.end()) {
+                buffer.push_back(it->second);
+                builder = "";
+                if (buffer.size() == BUFFSIZE) { 
+                    fwrite(buffer.data(), 1, BUFFSIZE, output);
+                    buffer.clear();
+                }
+                
+            }
+        }
+    }
+    fwrite(buffer.data(), 1, buffer.size(), output);
+    fclose(output);
+    fclose(input);
 
+}
+ 
 int main() {
     auto start = chrono::high_resolution_clock::now();    
     vector<Node*> count = vector<Node*>(256, nullptr);
@@ -157,9 +189,13 @@ int main() {
 
     unordered_map<CHAR, string> codes;
     parseTree(HuffmanRoot, codes, "");
-    for(auto &p: codes) cout << p.first << " " << p.second << endl;
+    //for(auto &p: codes) cout << p.first << " " << p.second << endl;
     
     encode(FILENAME+EXTENSION, FILENAME+".bin", codes);
+
+    unordered_map<string, CHAR> decodes = swap(codes);
+
+    decode(FILENAME+".bin", FILENAME+".decoded"+".txt", decodes);
 
     auto end = chrono::high_resolution_clock::now(); 
 
